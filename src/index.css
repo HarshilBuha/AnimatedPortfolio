@@ -6,7 +6,8 @@
   font-optical-sizing: auto;
   font-style: normal;
   line-height: 1.5;
-  scroll-behavior: smooth;
+  /* Removed scroll-behavior:smooth — Lenis handles smooth scroll, native CSS
+     smooth-scroll would double-animate and cause rendering conflicts */
   color-scheme: light dark;
   color: #eae5ec;
   background-color: var(--backgroundColor);
@@ -91,19 +92,30 @@ body {
   flex-wrap: nowrap;
 }
 
+/* --- GPU layer promotion for GSAP scroll-animated elements ---
+   will-change tells the browser to promote these to composited layers
+   BEFORE the animation starts, eliminating the "first frame stutter". */
 .landing-section {
   z-index: 1;
   background-color: var(--backgroundColor);
+}
+.landing-container {
+  will-change: transform, opacity;
 }
 .about-section {
   z-index: 2;
   background-color: var(--backgroundColor);
   position: relative;
+  will-change: transform, opacity;
+}
+.about-me {
+  will-change: transform;
 }
 .whatIDO {
   z-index: 3;
   background-color: var(--backgroundColor);
   position: relative;
+  will-change: transform;
 }
 .career-section {
   z-index: 4;
@@ -114,6 +126,13 @@ body {
   z-index: 5;
   background-color: var(--backgroundColor);
   position: relative;
+}
+.work-flex {
+  will-change: transform;
+}
+/* character-model is fixed + GSAP-transformed heavily */
+.character-model {
+  will-change: transform;
 }
 .techstack {
   width: 100%;

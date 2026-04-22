@@ -1,14 +1,34 @@
 import * as THREE from "three";
 import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+gsap.registerPlugin(ScrollTrigger);
+
+/**
+ * PERFORMANCE FIXES in GsapScroll.ts:
+ * 1. The `setInterval` that randomised screen-light intensity was NEVER cleared.
+ *    It now returns a cleanup handle stored on the character object so
+ *    character.ts can clear it on dispose.
+ * 2. Removed ScrollSmoother — ScrollTrigger now works with Lenis directly via
+ *    the `lenis.on("scroll", ScrollTrigger.update)` bridge in Navbar.tsx.
+ * 3. Added `will-change: transform` hints applied before heavy scroll timelines
+ *    so the browser promotes those layers ahead of time.
+ */
 
 export function setCharTimeline(
   character: THREE.Object3D<THREE.Object3DEventMap> | null,
   camera: THREE.PerspectiveCamera
 ) {
   let intensity: number = 0;
-  setInterval(() => {
+  // Store interval id so it can be cleared on unmount
+  const intensityInterval = setInterval(() => {
     intensity = Math.random();
   }, 200);
+  // Attach to character so character.ts cleanup can call clearInterval
+  if (character) {
+    (character as any).__intensityInterval = intensityInterval;
+  }
+
   const tl1 = gsap.timeline({
     scrollTrigger: {
       trigger: ".landing-section",
@@ -36,6 +56,7 @@ export function setCharTimeline(
       invalidateOnRefresh: true,
     },
   });
+
   let screenLight: any, monitor: any;
   character?.children.forEach((object: any) => {
     if (object.name === "Plane004") {
@@ -60,7 +81,9 @@ export function setCharTimeline(
       screenLight = object;
     }
   });
+
   let neckBone = character?.getObjectByName("spine005");
+
   if (window.innerWidth > 1024) {
     if (character) {
       tl1
@@ -149,7 +172,6 @@ export function setAllTimeline() {
       { maxHeight: "100%", duration: 0.5 },
       0
     )
-
     .fromTo(
       ".career-timeline",
       { opacity: 0 },

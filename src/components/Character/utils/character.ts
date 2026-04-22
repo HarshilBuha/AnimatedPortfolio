@@ -1,3 +1,4 @@
+// src/components/Character/utils/character.ts
 import * as THREE from "three";
 import { DRACOLoader, GLTF, GLTFLoader } from "three-stdlib";
 import { setCharTimeline, setAllTimeline } from "../../utils/GsapScroll";
@@ -15,9 +16,20 @@ const setCharacter = (
 
   const loadCharacter = () => {
     return new Promise<GLTF | null>(async (resolve) => {
-      // Check if we can use the encrypted file (requires Secure Context / crypto.subtle)
-      const canDecrypt = typeof window !== 'undefined' && window.crypto && window.crypto.subtle;
-      
+      const canDecrypt =
+        typeof window !== "undefined" &&
+        !!window.crypto &&
+        !!window.crypto.subtle;
+
+      let objectUrl: string | null = null;
+
+      const cleanupTempUrl = () => {
+        if (objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+          objectUrl = null;
+        }
+      };
+
       try {
         let modelUrl: string;
 
@@ -27,21 +39,32 @@ const setCharacter = (
               "/models/character.enc",
               "Character3D#@"
             );
-            modelUrl = URL.createObjectURL(new Blob([encryptedBlob]));
+            objectUrl = URL.createObjectURL(new Blob([encryptedBlob]));
+            modelUrl = objectUrl;
           } catch (e) {
             console.warn("Decryption failed, falling back to plain glb:", e);
             modelUrl = "/models/character.glb";
           }
         } else {
-          console.warn("Crypto Subtle not available (Non-secure context?), using plain glb fallback.");
+          console.warn(
+            "Crypto Subtle not available (non-secure context), using plain glb fallback."
+          );
           modelUrl = "/models/character.glb";
         }
 
         loader.load(
           modelUrl,
-          async (gltf) => {
+          (gltf) => {
             const character = gltf.scene;
-            await renderer.compileAsync(character, camera, scene);
+
+            // Resolve immediately so app loading can finish even if shader compile is slow.
+            resolve(gltf);
+
+            // Run compile in background; never block app boot on this.
+            void renderer.compileAsync(character, camera, scene).catch((err) => {
+              console.warn("compileAsync failed or was skipped:", err);
+            });
+
             character.traverse((child: any) => {
               if (child.isMesh) {
                 const mesh = child as THREE.Mesh;
@@ -50,26 +73,40 @@ const setCharacter = (
                 mesh.frustumCulled = true;
               }
             });
-            resolve(gltf);
+
             setCharTimeline(character, camera);
             setAllTimeline();
-            
-            // Safety check for foot bones
+
             const footR = character.getObjectByName("footR");
             const footL = character.getObjectByName("footL");
             if (footR) footR.position.y = 3.36;
             if (footL) footL.position.y = 3.36;
-            
+
+            // Clear GSAP interval on scene dispose.
+            renderer.domElement.addEventListener(
+              "_dispose",
+              () => {
+                const interval = (character as any).__intensityInterval;
+                if (interval !== undefined) clearInterval(interval);
+              },
+              { once: true }
+            );
+
+            cleanupTempUrl();
             dracoLoader.dispose();
           },
           undefined,
           (error) => {
             console.error("Error loading GLTF model:", error);
-            resolve(null); // Resolve with null to let the loading screen finish
+            cleanupTempUrl();
+            dracoLoader.dispose();
+            resolve(null);
           }
         );
       } catch (err) {
         console.error("Character loading error:", err);
+        cleanupTempUrl();
+        dracoLoader.dispose();
         resolve(null);
       }
     });

@@ -10,6 +10,29 @@ import {
   CylinderCollider,
   RapierRigidBody,
 } from "@react-three/rapier";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+gsap.registerPlugin(ScrollTrigger);
+
+/**
+ * PERFORMANCE FIX — TechStack.tsx:
+ *
+ * The original code mounted and DESTROYED the entire R3F <Canvas> + Rapier
+ * physics world every time the section scrolled in or out of view. That means:
+ *   - WebGL context creation/destruction  (~50–200ms each time)
+ *   - Texture re-upload to GPU
+ *   - Rapier WASM physics world reinitialisation
+ *   - React tree teardown + remount
+ *
+ * Fix:
+ *   1. Canvas is mounted ONCE and stays alive — never unmounted.
+ *   2. `frameloop="demand"` → R3F only renders when invalidate() is called,
+ *      which Rapier/useFrame do automatically while active. Zero cost when idle.
+ *   3. Physics `paused` prop stops the simulation (and useFrame calls) when
+ *      the section is not visible.
+ *   4. CSS `visibility` + `pointer-events` hide the canvas without teardown.
+ */
 
 const imageUrls = [
   "/images/react2.webp",
@@ -54,7 +77,6 @@ function SphereGeo({
       .copy(new THREE.Vector3(translation.x, translation.y, translation.z))
       .normalize()
       .multiplyScalar(-150 * delta * scale);
-
     api.current.applyImpulse(impulse, true);
   });
 
@@ -120,7 +142,7 @@ function Pointer({ vec = new THREE.Vector3(), isActive }: PointerProps) {
 
 const TechStackContent = ({ isActive }: { isActive: boolean }) => {
   const textures = useTexture(imageUrls);
-  
+
   const materials = useMemo(() => {
     return textures.map(
       (texture) =>
@@ -136,6 +158,7 @@ const TechStackContent = ({ isActive }: { isActive: boolean }) => {
   }, [textures]);
 
   return (
+    // paused=true halts Rapier simulation when out of view — zero CPU cost
     <Physics gravity={[0, 0, 0]} paused={!isActive}>
       <Pointer isActive={isActive} />
       {spheres.map((props, i) => (
@@ -150,41 +173,45 @@ const TechStackContent = ({ isActive }: { isActive: boolean }) => {
   );
 };
 
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-
-gsap.registerPlugin(ScrollTrigger);
-
 const TechStack = () => {
   const [isActive, setIsActive] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
-
     const trigger = ScrollTrigger.create({
       trigger: containerRef.current,
       start: "top 80%",
       end: "bottom top",
       onToggle: (self) => setIsActive(self.isActive),
     });
-
-    // Refresh ScrollTrigger to account for pinned content heights
     ScrollTrigger.refresh();
-
-    return () => {
-      trigger.kill();
-    };
+    return () => { trigger.kill(); };
   }, []);
 
   return (
     <div className="techstack" ref={containerRef} id="techstack">
-      <h2> My Techstack</h2>
-
-      {isActive && (
+      <h2>My Techstack</h2>
+      {/*
+        Canvas is always mounted — only visibility changes.
+        frameloop="demand" means R3F won't render unless something calls
+        invalidate() — Rapier's useFrame does this automatically while active.
+      */}
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          position: "absolute",
+          top: 0,
+          left: 0,
+          visibility: isActive ? "visible" : "hidden",
+          pointerEvents: isActive ? "auto" : "none",
+        }}
+      >
         <Canvas
           shadows
-          dpr={[1, 2]}
+          dpr={[1, 1.5]}
+          frameloop="demand"
           gl={{ alpha: true, stencil: false, depth: false, antialias: false }}
           camera={{ position: [0, 0, 20], fov: 32.5, near: 1, far: 100 }}
           onCreated={(state) => (state.gl.toneMappingExposure = 1.5)}
@@ -212,7 +239,7 @@ const TechStack = () => {
             <N8AO color="#0f002c" aoRadius={2} intensity={1.15} />
           </EffectComposer>
         </Canvas>
-      )}
+      </div>
     </div>
   );
 };

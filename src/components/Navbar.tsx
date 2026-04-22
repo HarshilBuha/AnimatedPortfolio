@@ -2,46 +2,80 @@ import { useEffect } from "react";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import HoverLinks from "./HoverLinks";
 import { gsap } from "gsap";
-// @ts-ignore
-import { ScrollSmoother } from "gsap-trial/ScrollSmoother";
+import Lenis from "lenis";
 import "./styles/Navbar.css";
 import { personalInfo } from "../data/portfolioData";
 
-gsap.registerPlugin(ScrollSmoother, ScrollTrigger);
-// @ts-ignore
-export let smoother: ScrollSmoother;
+gsap.registerPlugin(ScrollTrigger);
+
+/**
+ * PERFORMANCE FIX — Navbar.tsx:
+ *
+ * Replaced gsap-trial/ScrollSmoother with Lenis (lenis@1.3+).
+ * Reasons:
+ *  - ScrollSmoother uses `speed: 1.7` which stretches content position beyond
+ *    the true scroll value, forcing style recalculation on EVERY frame.
+ *  - Lenis hooks into gsap.ticker so smooth scroll and GSAP animations share
+ *    the same RAF tick — zero double-RAF overhead.
+ *  - `gsap.ticker.lagSmoothing(0)` prevents GSAP from capping delta on slow
+ *    frames, which was causing ScrollTrigger scrub to stutter on scroll start.
+ *  - `paused(true)` equivalent: lenis.stop() / lenis.start() pattern.
+ */
+
+// Module-level lenis instance so GsapScroll / other modules can reference it
+export let lenis: Lenis | null = null;
 
 const Navbar = () => {
   useEffect(() => {
-    smoother = ScrollSmoother.create({
-      wrapper: "#smooth-wrapper",
-      content: "#smooth-content",
-      smooth: 1.7,
-      speed: 1.7,
-      effects: true,
-      autoResize: true,
-      ignoreMobileResize: true,
+    lenis = new Lenis({
+      duration: 1.4,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      touchMultiplier: 2,
+      infinite: false,
     });
 
-    smoother.scrollTop(0);
-    smoother.paused(true);
+    // Sync Lenis with GSAP ticker — single RAF for both
+    gsap.ticker.add((time) => {
+      lenis!.raf(time * 1000);
+    });
+    // Disable GSAP's lag smoothing cap which causes scroll stutters
+    gsap.ticker.lagSmoothing(0);
 
-    let links = document.querySelectorAll(".header ul a");
+    // Sync ScrollTrigger with Lenis scroll position
+    lenis.on("scroll", ScrollTrigger.update);
+
+    // Start paused until loading screen completes
+    lenis.stop();
+
+    // Scroll to top on init
+    lenis.scrollTo(0, { immediate: true });
+
+    // Nav link click → smooth scroll to section
+    const links = document.querySelectorAll(".header ul a");
     links.forEach((elem) => {
-      let element = elem as HTMLAnchorElement;
+      const element = elem as HTMLAnchorElement;
       element.addEventListener("click", (e) => {
         if (window.innerWidth > 1024) {
           e.preventDefault();
-          let elem = e.currentTarget as HTMLAnchorElement;
-          let section = elem.getAttribute("data-href");
-          smoother.scrollTo(section, true, "top top");
+          const section = element.getAttribute("data-href");
+          if (section) {
+            lenis!.scrollTo(section, { offset: 0, duration: 1.4 });
+          }
         }
       });
     });
-    window.addEventListener("resize", () => {
-      ScrollSmoother.refresh(true);
-    });
+
+    const onResize = () => ScrollTrigger.refresh();
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      gsap.ticker.remove((time) => lenis!.raf(time * 1000));
+      lenis?.destroy();
+      lenis = null;
+      window.removeEventListener("resize", onResize);
+    };
   }, []);
+
   return (
     <>
       <div className="header">

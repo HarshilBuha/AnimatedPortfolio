@@ -1,6 +1,12 @@
+/*
+ * PERFORMANCE FIX: cursor now uses transform (GPU-composited) instead of top/left (triggers layout).
+ * The cursor JS writes `transform: translate(x,y)` directly — no CSS transition on transform
+ * so RAF has full control. Only width/height/opacity use transitions.
+ */
 .cursor-main {
   --size: 0px;
   position: fixed;
+  /* Offset so the cursor center aligns with the pointer */
   top: calc(var(--size) / -2);
   left: calc(var(--size) / -2);
   width: var(--size);
@@ -11,14 +17,16 @@
   background-color: #e6c3ff;
   box-shadow: 0px 0px 30px 0px rgb(175, 131, 255);
   mix-blend-mode: difference;
-  transition: top 0.3s ease-out, left 0.3s ease-out, width 0.3s ease-out,
-    height 0.3s ease-out;
+  /* Only non-transform props use transitions */
+  will-change: transform;
+  transition: width 0.3s ease-out, height 0.3s ease-out, opacity 0.3s ease-out;
 }
 .cursor-icons {
+  /* Slight visual offset for icon snapping feel */
   top: 10px;
   left: 10px;
   height: calc(var(--cursorH) - 20px);
-  transition: all 0.5s ease-out, height 0.5s ease-in-out;
+  transition: width 0.5s ease-out, height 0.5s ease-in-out, opacity 0.3s;
 }
 .cursor-disable {
   --size: 0px;

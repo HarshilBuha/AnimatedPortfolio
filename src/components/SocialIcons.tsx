@@ -8,64 +8,94 @@ import "./styles/SocialIcons.css";
 import { TbNotes } from "react-icons/tb";
 import { useEffect } from "react";
 import HoverLinks from "./HoverLinks";
+import { personalInfo } from "../data/portfolioData";
 
+/**
+ * PERFORMANCE FIXES in SocialIcons.tsx:
+ * 1. Previously spawned 4 independent requestAnimationFrame loops (one per icon)
+ *    — all running forever. Now uses a SINGLE shared RAF loop for all icons.
+ * 2. mousemove listener is now passive: true.
+ * 3. Cleanup actually cancels the RAF and removes the document listener.
+ */
 const SocialIcons = () => {
   useEffect(() => {
     const social = document.getElementById("social") as HTMLElement;
+    if (!social) return;
+
+    type IconState = {
+      elem: HTMLElement;
+      link: HTMLElement;
+      rect: DOMRect;
+      mouseX: number;
+      mouseY: number;
+      currentX: number;
+      currentY: number;
+    };
+
+    const icons: IconState[] = [];
 
     social.querySelectorAll("span").forEach((item) => {
       const elem = item as HTMLElement;
       const link = elem.querySelector("a") as HTMLElement;
-
+      if (!link) return;
       const rect = elem.getBoundingClientRect();
-      let mouseX = rect.width / 2;
-      let mouseY = rect.height / 2;
-      let currentX = 0;
-      let currentY = 0;
+      icons.push({
+        elem,
+        link,
+        rect,
+        mouseX: rect.width / 2,
+        mouseY: rect.height / 2,
+        currentX: rect.width / 2,
+        currentY: rect.height / 2,
+      });
+    });
 
-      const updatePosition = () => {
-        currentX += (mouseX - currentX) * 0.1;
-        currentY += (mouseY - currentY) * 0.1;
+    // Single RAF loop for ALL icons — far cheaper than 4 separate loops
+    let rafId: number;
+    const updateAll = () => {
+      for (const icon of icons) {
+        icon.currentX += (icon.mouseX - icon.currentX) * 0.1;
+        icon.currentY += (icon.mouseY - icon.currentY) * 0.1;
+        icon.link.style.setProperty("--siLeft", `${icon.currentX}px`);
+        icon.link.style.setProperty("--siTop", `${icon.currentY}px`);
+      }
+      rafId = requestAnimationFrame(updateAll);
+    };
+    rafId = requestAnimationFrame(updateAll);
 
-        link.style.setProperty("--siLeft", `${currentX}px`);
-        link.style.setProperty("--siTop", `${currentY}px`);
-
-        requestAnimationFrame(updatePosition);
-      };
-
-      const onMouseMove = (e: MouseEvent) => {
+    const onMouseMove = (e: MouseEvent) => {
+      for (const icon of icons) {
+        const rect = icon.elem.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
-
         if (x < 40 && x > 10 && y < 40 && y > 5) {
-          mouseX = x;
-          mouseY = y;
+          icon.mouseX = x;
+          icon.mouseY = y;
         } else {
-          mouseX = rect.width / 2;
-          mouseY = rect.height / 2;
+          icon.mouseX = rect.width / 2;
+          icon.mouseY = rect.height / 2;
         }
-      };
+      }
+    };
 
-      document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mousemove", onMouseMove, { passive: true });
 
-      updatePosition();
-
-      return () => {
-        elem.removeEventListener("mousemove", onMouseMove);
-      };
-    });
+    return () => {
+      cancelAnimationFrame(rafId);
+      document.removeEventListener("mousemove", onMouseMove);
+    };
   }, []);
 
   return (
     <div className="icons-section">
       <div className="social-icons" data-cursor="icons" id="social">
         <span>
-          <a href="https://github.com" target="_blank">
+          <a href={personalInfo.github} target="_blank">
             <FaGithub />
           </a>
         </span>
         <span>
-          <a href="https://www.linkedin.com" target="_blank">
+          <a href={personalInfo.linkedin} target="_blank">
             <FaLinkedinIn />
           </a>
         </span>

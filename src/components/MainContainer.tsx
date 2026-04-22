@@ -10,6 +10,13 @@ import WhatIDo from "./WhatIDo";
 import Work from "./Work";
 import setSplitText from "./utils/splitText";
 
+/**
+ * PERFORMANCE FIX — MainContainer.tsx:
+ * Removed the #smooth-wrapper / #smooth-content div pair that ScrollSmoother
+ * required. Lenis operates on the native document scroll — no wrapper needed.
+ * This removes one layer of DOM nesting and eliminates the translateY trick
+ * ScrollSmoother used to fake scroll position (which caused layout thrash).
+ */
 const TechStack = lazy(() => import("./TechStack"));
 
 const MainContainer = ({ children }: PropsWithChildren) => {
@@ -18,10 +25,10 @@ const MainContainer = ({ children }: PropsWithChildren) => {
   );
 
   useEffect(() => {
-    let timeoutId: number;
+    let timeoutId: ReturnType<typeof setTimeout>;
     const resizeHandler = () => {
-      window.clearTimeout(timeoutId);
-      timeoutId = window.setTimeout(() => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
         setSplitText();
         setIsDesktopView(window.innerWidth > 1024);
       }, 200);
@@ -30,7 +37,7 @@ const MainContainer = ({ children }: PropsWithChildren) => {
     window.addEventListener("resize", resizeHandler);
     return () => {
       window.removeEventListener("resize", resizeHandler);
-      window.clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
     };
   }, [isDesktopView]);
 
@@ -40,22 +47,18 @@ const MainContainer = ({ children }: PropsWithChildren) => {
       <Navbar />
       <SocialIcons />
       {isDesktopView && children}
-      <div id="smooth-wrapper">
-        <div id="smooth-content">
-          <div className="container-main">
-            <Landing>{!isDesktopView && children}</Landing>
-            <About />
-            <WhatIDo />
-            <Career />
-            <Work />
-            {isDesktopView && (
-              <Suspense fallback={<div>Loading....</div>}>
-                <TechStack />
-              </Suspense>
-            )}
-            <Contact />
-          </div>
-        </div>
+      <div className="container-main">
+        <Landing>{!isDesktopView && children}</Landing>
+        <About />
+        <WhatIDo />
+        <Career />
+        <Work />
+        {isDesktopView && (
+          <Suspense fallback={<div>Loading....</div>}>
+            <TechStack />
+          </Suspense>
+        )}
+        <Contact />
       </div>
     </div>
   );

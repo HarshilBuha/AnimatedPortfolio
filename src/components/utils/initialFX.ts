@@ -1,11 +1,18 @@
 // @ts-ignore
-import { SplitText } from "gsap-trial/SplitText";
+import { SplitText } from "gsap/SplitText";
 import gsap from "gsap";
-import { smoother } from "../Navbar";
+import { lenis } from "../Navbar";
 
+/**
+ * PERFORMANCE FIX — initialFX.ts:
+ * - Replaced smoother.paused(false) with lenis.start() to match the new
+ *   Lenis-based scroll setup in Navbar.tsx.
+ * - All animation logic is unchanged.
+ */
 export function initialFX() {
   document.body.style.overflowY = "auto";
-  smoother.paused(false);
+  // Resume smooth scroll now that loading is complete
+  lenis?.start();
   document.getElementsByTagName("main")[0].classList.add("main-active");
   gsap.to("body", {
     backgroundColor: "#0b080c",

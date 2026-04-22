@@ -1,20 +1,29 @@
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 // @ts-ignore
-import { ScrollSmoother } from "gsap-trial/ScrollSmoother";
-// @ts-ignore
-import { SplitText } from "gsap-trial/SplitText";
+import { SplitText } from "gsap/SplitText";
+
+/**
+ * PERFORMANCE FIX — splitText.ts:
+ * - Removed ScrollSmoother import (replaced by Lenis in Navbar.tsx).
+ * - ScrollTrigger.config({ ignoreMobileResize: true }) is kept — this prevents
+ *   expensive recalculations when the mobile browser chrome shows/hides.
+ * - Removed the recursive ScrollTrigger "refresh" listener that called
+ *   setSplitText() on every refresh — this created an infinite loop of
+ *   SplitText recreations during resize.
+ */
 
 interface ParaElement extends HTMLElement {
   anim?: gsap.core.Animation;
   split?: SplitText;
 }
 
-gsap.registerPlugin(ScrollTrigger, ScrollSmoother, SplitText);
+gsap.registerPlugin(ScrollTrigger, SplitText);
 
 export default function setSplitText() {
   ScrollTrigger.config({ ignoreMobileResize: true });
   if (window.innerWidth < 900) return;
+
   const paras: NodeListOf<ParaElement> = document.querySelectorAll(".para");
   const titles: NodeListOf<ParaElement> = document.querySelectorAll(".title");
 
@@ -50,6 +59,7 @@ export default function setSplitText() {
       }
     );
   });
+
   titles.forEach((title: ParaElement) => {
     if (title.anim) {
       title.anim.progress(1).kill();
@@ -77,6 +87,6 @@ export default function setSplitText() {
       }
     );
   });
-
-  ScrollTrigger.addEventListener("refresh", () => setSplitText());
+  // NOTE: Removed the recursive ScrollTrigger "refresh" listener here.
+  // MainContainer handles re-running setSplitText() on resize with a debounce.
 }
